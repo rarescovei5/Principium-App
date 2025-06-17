@@ -4,11 +4,13 @@ use sqlx::{ prelude::FromRow, QueryBuilder};
 use uuid::Uuid;
 
 use crate::{models::UserData, AppState};
-
+ 
+// _______________________________________ User related routes _______________________________________
 #[derive(Debug, Deserialize)]
 pub struct CreateSnippetRequest {
     pub title: String,
 }
+
 #[post("/snippets")]
 pub async fn create_snippet(
     app_data: web::Data<AppState>, 
@@ -22,7 +24,7 @@ pub async fn create_snippet(
         RETURNING id
         "#,
         data_json.title,
-        user_data.id
+        user_data.id,
     )
     .fetch_one(&app_data.db)
     .await
@@ -41,7 +43,7 @@ pub async fn get_user_snippets (
     let req_user_id = user_data.id;
 
     let snippets = sqlx::query_as!(
-        SnippetResponse,
+        SnippetData,
         r#"
         SELECT title, description, code, language FROM snippets_extension.snippets
         WHERE owner_id = $1
@@ -73,7 +75,7 @@ pub async fn get_user_snippet(
 
     // load exactly one snippet by owner + id
     let snippet = sqlx::query_as!(
-        SnippetResponse,
+        SnippetData,
         r#"
         SELECT title, description, code, language
           FROM snippets_extension.snippets
@@ -209,11 +211,9 @@ pub async fn delete_snippet(
     .await
     .map_err(actix_web::error::ErrorInternalServerError)?;
 
-    if let Some(deleted) = rec {
+    if let Some(_) = rec {
         return Ok(
-            HttpResponse::Ok().json(serde_json::json!({
-                "id": deleted.id,
-            }))
+            HttpResponse::Ok().finish()
         )
     } else {
         return Ok(
@@ -226,11 +226,11 @@ pub async fn delete_snippet(
 
 
 #[derive(Deserialize, Serialize, FromRow)]
-pub struct SnippetResponse {
+pub struct SnippetData {
     pub title: String,
     pub description: Option<String>,
-    pub code: String,
-    pub language: String,
+    pub code: Option<String>,
+    pub language: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -245,8 +245,10 @@ pub struct PageResponse {
     pub total_records: i64,
     pub total_pages:   u32,
     pub current_page:  u32,
-    pub records:       Vec<SnippetResponse>,
+    pub records:       Vec<SnippetData>,
 }
+
+// _______________________________________ Snippets related routes _______________________________________
 
 #[get("")]
 pub async fn get_page_snippets(
@@ -273,12 +275,16 @@ pub async fn get_page_snippets(
     );
 
     let mut has_where = false;
-    if let Some(lang) = &language {
-        let clause = if has_where { " AND language = " } else { " WHERE language = " };
-        count_qb.push(clause).push_bind(lang);
-        data_qb.push(clause).push_bind(lang);
-        has_where = true;
+    match &language {
+        Some(lang) if !lang.is_empty() => {
+            let clause = if has_where { " AND language = " } else { " WHERE language = " };
+            count_qb.push(clause).push_bind(lang);
+            data_qb.push(clause).push_bind(lang);
+            has_where = true;
+        }
+        _ => {}
     }
+    
     if let Some(t) = &title {
         let pattern = format!("%{}%", t);
         let clause  = if has_where { " AND title ILIKE " } else { " WHERE title ILIKE " };
@@ -299,7 +305,7 @@ pub async fn get_page_snippets(
         .map_err(actix_web::error::ErrorInternalServerError)?;
 
     // ——— Execute DATA fetch ———
-    let records: Vec<SnippetResponse> = data_qb
+    let records: Vec<SnippetData> = data_qb
         .build_query_as()
         .fetch_all(&app_data.db)
         .await
