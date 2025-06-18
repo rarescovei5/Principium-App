@@ -1,0 +1,58 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        WITH star_counts AS (\n          SELECT \n            snippet_id,\n            COUNT(*) AS stars\n          FROM snippets_extension.snippet_stars\n          GROUP BY snippet_id\n        ),\n        tag_lists AS (\n          SELECT\n            st.snippet_id,\n            array_agg(DISTINCT t.name) AS tags\n          FROM snippets_extension.snippet_tags st\n          JOIN snippets_extension.tags t\n            ON t.id = st.tag_id\n          GROUP BY st.snippet_id\n        )\n        SELECT\n          s.id,\n          s.title,\n          s.description,\n          s.code,\n          s.language,\n          COALESCE(sc.stars, 0) AS \"stars!: i64\", -- Built Stars Column (Defaults to 0)\n          COALESCE(tl.tags, ARRAY[]::TEXT[]) AS \"tags!: Vec<String>\" -- Built Tags Column (Defaults to Empty Array of Text)\n        FROM snippets_extension.snippets s\n        LEFT JOIN star_counts sc\n          ON sc.snippet_id = s.id\n        LEFT JOIN tag_lists tl\n          ON tl.snippet_id = s.id\n        WHERE s.owner_id = $1\n        ORDER BY s.created_at DESC\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "title",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "description",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "code",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "language",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "stars!: i64",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 6,
+        "name": "tags!: Vec<String>",
+        "type_info": "TextArray"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      true,
+      true,
+      null,
+      null
+    ]
+  },
+  "hash": "61da86b49349430d519dec3d63091b758855400407bd6629f1d3edf0a3290e86"
+}

@@ -1,0 +1,19 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        UPDATE snippets_extension.snippets\n        SET\n            title       = $1,\n            description = $2,\n            code        = $3,\n            language    = $4,\n            updated_at  = NOW()\n        WHERE\n            id       = $5\n            AND owner_id = $6\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "6a4cf802cb64018808fbdd5688f518df1c9254ca4a1a2d917e0c4bae2b77b87d"
+}

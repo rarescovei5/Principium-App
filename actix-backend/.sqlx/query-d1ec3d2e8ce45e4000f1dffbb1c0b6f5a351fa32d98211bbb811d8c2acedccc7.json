@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        WITH new_tags AS (\n            INSERT INTO snippets_extension.tags(name)\n            SELECT unnest($1::text[])\n            ON CONFLICT (name) DO NOTHING\n            RETURNING id\n        ),\n        all_tags AS (\n            SELECT id\n              FROM snippets_extension.tags\n             WHERE name = ANY($1::text[])\n        ),\n        deleted AS (\n            DELETE FROM snippets_extension.snippet_tags st\n             WHERE st.snippet_id = $2\n               AND st.tag_id NOT IN (SELECT id FROM all_tags)\n        ),\n        inserted AS (\n            INSERT INTO snippets_extension.snippet_tags(snippet_id, tag_id)\n            SELECT $2, id FROM all_tags\n            ON CONFLICT DO NOTHING\n        )\n        SELECT 1 as unused;\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "unused",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "TextArray",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "d1ec3d2e8ce45e4000f1dffbb1c0b6f5a351fa32d98211bbb811d8c2acedccc7"
+}

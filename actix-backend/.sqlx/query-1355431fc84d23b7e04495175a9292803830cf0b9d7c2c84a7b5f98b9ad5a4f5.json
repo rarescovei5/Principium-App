@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                INSERT INTO user_sessions\n                  (user_id, refresh_token, user_agent, ip_address, device_id)\n                VALUES ($1, $2, $3, $4, $5)\n                ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "1355431fc84d23b7e04495175a9292803830cf0b9d7c2c84a7b5f98b9ad5a4f5"
+}

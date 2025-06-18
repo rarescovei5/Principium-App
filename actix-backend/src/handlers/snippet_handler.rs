@@ -42,11 +42,40 @@ pub async fn get_user_snippets (
     let user_id = path.into_inner();
     let req_user_id = user_data.id;
 
-    let snippets = sqlx::query_as!(
+    let snippets: Vec<SnippetData> = sqlx::query_as!(
         SnippetData,
         r#"
-        SELECT title, description, code, language FROM snippets_extension.snippets
-        WHERE owner_id = $1
+        WITH star_counts AS (
+          SELECT 
+            snippet_id,
+            COUNT(*) AS stars
+          FROM snippets_extension.snippet_stars
+          GROUP BY snippet_id
+        ),
+        tag_lists AS (
+          SELECT
+            st.snippet_id,
+            array_agg(DISTINCT t.name) AS tags
+          FROM snippets_extension.snippet_tags st
+          JOIN snippets_extension.tags t
+            ON t.id = st.tag_id
+          GROUP BY st.snippet_id
+        )
+        SELECT
+          s.id,
+          s.title,
+          s.description,
+          s.code,
+          s.language,
+          COALESCE(sc.stars, 0) AS "stars!: i64", -- Built Stars Column (Defaults to 0)
+          COALESCE(tl.tags, ARRAY[]::TEXT[]) AS "tags!: Vec<String>" -- Built Tags Column (Defaults to Empty Array of Text)
+        FROM snippets_extension.snippets s
+        LEFT JOIN star_counts sc
+          ON sc.snippet_id = s.id
+        LEFT JOIN tag_lists tl
+          ON tl.snippet_id = s.id
+        WHERE s.owner_id = $1
+        ORDER BY s.created_at DESC
         "#,
         user_id
     )
@@ -77,10 +106,39 @@ pub async fn get_user_snippet(
     let snippet = sqlx::query_as!(
         SnippetData,
         r#"
-        SELECT title, description, code, language
-          FROM snippets_extension.snippets
-         WHERE owner_id = $1
-           AND id       = $2
+        WITH star_counts AS (
+            SELECT
+                snippet_id,
+                COUNT(*) AS stars
+            FROM snippets_extension.snippet_stars
+            GROUP BY snippet_id
+        ),
+        tag_lists AS (
+            SELECT
+                st.snippet_id,
+                array_agg(DISTINCT t.name) AS tags
+            FROM snippets_extension.snippet_tags st
+            JOIN snippets_extension.tags t
+                ON t.id = st.tag_id
+            GROUP BY st.snippet_id
+        )
+        SELECT
+            s.id,
+            s.title,
+            s.description,
+            s.code,
+            s.language,
+            COALESCE(sc.stars, 0) AS "stars!: i64", -- Built Stars Column (Defaults to 0)
+            COALESCE(tl.tags, ARRAY[]::TEXT[]) AS "tags!: Vec<String>" -- Built Tags Column (Defaults to Empty Array of Text)
+        FROM snippets_extension.snippets s
+        LEFT JOIN star_counts sc
+            ON sc.snippet_id = s.id
+        LEFT JOIN tag_lists tl
+            ON tl.snippet_id = s.id
+        WHERE
+            s.owner_id = $1
+        AND 
+            s.id = $2
         "#,
         user_id,
         snippet_id
@@ -227,10 +285,13 @@ pub async fn delete_snippet(
 
 #[derive(Deserialize, Serialize, FromRow)]
 pub struct SnippetData {
-    pub title: String,
+    pub id:          Uuid,
+    pub title:       String,
     pub description: Option<String>,
-    pub code: Option<String>,
-    pub language: Option<String>,
+    pub code:        Option<String>,
+    pub language:    Option<String>,
+    pub stars:       i64,
+    pub tags:        Vec<String>,
 }
 
 #[derive(Deserialize)]
@@ -269,8 +330,27 @@ pub async fn get_page_snippets(
 
     let mut data_qb = QueryBuilder::new(
         r#"
-        SELECT id, title, description, code, language 
-        FROM snippets_extension.snippets
+        SELECT 
+            s.id,
+            s.title,
+            s.description,
+            s.code,
+            s.language,
+            -- count how many stars this snippet has
+            COUNT(ss.user_id) AS stars,
+            -- collect its tags (empty array if none)
+            COALESCE(
+              array_agg(DISTINCT t.name) 
+              FILTER (WHERE t.name IS NOT NULL),
+              ARRAY[]::TEXT[]
+            ) AS tags
+        FROM snippets_extension.snippets s
+        LEFT JOIN snippets_extension.snippet_stars AS ss
+          ON ss.snippet_id = s.id
+        LEFT JOIN snippets_extension.snippet_tags AS st
+          ON st.snippet_id = s.id
+        LEFT JOIN snippets_extension.tags AS t
+          ON t.id = st.tag_id
         "#
     );
 
@@ -292,10 +372,12 @@ pub async fn get_page_snippets(
         data_qb.push(clause).push_bind(pattern);
     }
 
-    data_qb
-        .push(" ORDER BY created_at DESC")
+     data_qb
+        .push(" GROUP BY s.id, s.title, s.description, s.code, s.language, s.created_at")
+        .push(" ORDER BY s.created_at DESC")
         .push(" LIMIT ").push_bind(per_page as i64)
         .push(" OFFSET ").push_bind(offset as i64);
+
 
     // ——— Execute COUNT ———
     let (total_records,): (i64,) = count_qb

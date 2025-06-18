@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        DELETE FROM snippets_extension.snippet_stars\n         WHERE user_id    = $1\n           AND snippet_id = $2\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "fa4b13d0e4744d355c2dcff4bf945111b8f23f255399e823c86939662b32f7d8"
+}

@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        UPDATE user_sessions\n           SET revoked = TRUE\n         WHERE user_id   = $1\n           AND device_id = $2\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "d183a2db64576dbb248eb51bfa8e692ebde2a0ad96829a995de6d5ccc501fd5d"
+}
