@@ -10,7 +10,7 @@ pub struct Snippet {
     pub owner_id: Uuid,
     pub title: String,
     pub description: Option<String>,
-    pub code: String,
+    pub code: Option<String>,
     pub language: String,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,

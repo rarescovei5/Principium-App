@@ -74,7 +74,7 @@ CREATE TABLE snippets_extension.snippets (
   title TEXT NOT NULL,
   description TEXT,
   code TEXT,
-  language TEXT,
+  language TEXT NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
   code_tsv tsvector GENERATED ALWAYS AS (to_tsvector('english', code)) STORED

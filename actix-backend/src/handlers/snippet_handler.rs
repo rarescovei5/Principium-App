@@ -9,6 +9,7 @@ use crate::{models::UserData, AppState};
 #[derive(Debug, Deserialize)]
 pub struct CreateSnippetRequest {
     pub title: String,
+    pub language: String,
 }
 
 #[post("/snippets")]
@@ -19,11 +20,12 @@ pub async fn create_snippet(
 ) -> actix_web::Result<impl Responder> {
     let rec = sqlx::query!(
         r#"
-        INSERT INTO snippets_extension.snippets (title, owner_id)
-        VALUES ($1, $2)
+        INSERT INTO snippets_extension.snippets (title, language, owner_id)
+        VALUES ($1, $2, $3)
         RETURNING id
         "#,
         data_json.title,
+        data_json.language,
         user_data.id,
     )
     .fetch_one(&app_data.db)
@@ -289,7 +291,7 @@ pub struct SnippetData {
     pub title:       String,
     pub description: Option<String>,
     pub code:        Option<String>,
-    pub language:    Option<String>,
+    pub language:    String,
     pub stars:       i64,
     pub tags:        Vec<String>,
 }
@@ -379,14 +381,14 @@ pub async fn get_page_snippets(
         .push(" OFFSET ").push_bind(offset as i64);
 
 
-    // ——— Execute COUNT ———
+    // --- Execute COUNT ---
     let (total_records,): (i64,) = count_qb
         .build_query_as()
         .fetch_one(&app_data.db)
         .await
         .map_err(actix_web::error::ErrorInternalServerError)?;
 
-    // ——— Execute DATA fetch ———
+    // --- Execute DATA fetch ---
     let records: Vec<SnippetData> = data_qb
         .build_query_as()
         .fetch_all(&app_data.db)
@@ -402,6 +404,53 @@ pub async fn get_page_snippets(
         records,
     }))
 }
+
+
+#[derive(Deserialize)]
+pub struct IdsParams {
+    pub ids: String,
+}
+#[derive(Deserialize, Serialize, FromRow)]
+pub struct SnippetCore {
+    pub id:          Uuid,
+    pub title:       String,
+    pub description: Option<String>,
+    pub code:        Option<String>,
+    pub language:    String,
+}
+
+#[get("/batch")]
+pub async fn get_snippets_by_ids(
+    app_data: web::Data<AppState>,
+    params:   web::Query<IdsParams>,
+) -> actix_web::Result<impl Responder> {
+    let ids: Vec<Uuid> = params
+        .ids
+        .split(',')
+        .filter_map(|s| Uuid::parse_str(s).ok())
+        .collect();
+
+    let records = sqlx::query_as!( 
+        SnippetCore,
+        r#"
+        SELECT 
+            id,
+            title,
+            description,
+            code,
+            language
+        FROM snippets_extension.snippets 
+        WHERE id = ANY($1)
+        "#, 
+        &ids[..] 
+    )
+    .fetch_all(&app_data.db)
+    .await
+    .map_err(actix_web::error::ErrorInternalServerError)?;
+
+    Ok(HttpResponse::Ok().json(records))
+}
+
 
 #[post("/{snippetId}/star")]
 pub async fn star_snippet(
