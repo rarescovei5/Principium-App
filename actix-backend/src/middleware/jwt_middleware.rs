@@ -1,10 +1,10 @@
-use std::{ future::{ready, Ready}};
+use std::{ future::{ready, Ready}, rc::Rc};
 
 use actix_web::{dev::{forward_ready, Service, ServiceRequest, ServiceResponse, Transform}, error::ErrorUnauthorized, web, Error, HttpMessage};
 use futures_util::future::LocalBoxFuture;
 use jsonwebtoken::{decode, DecodingKey, Validation};
 
-use crate::{models::Claims, AppState};
+use crate::{models::{Claims, SubscriptionData}, AppState};
 
 #[derive(Clone)]
 pub struct VerifyJWT {
@@ -19,7 +19,7 @@ impl VerifyJWT {
 
 impl<S, B> Transform<S, ServiceRequest> for VerifyJWT
 where
-    S: Service<ServiceRequest, Response = ServiceResponse<B>, Error = Error>,
+    S: Service<ServiceRequest, Response = ServiceResponse<B>, Error = Error> + 'static,
     S::Future: 'static,
     B: 'static,
 {
@@ -31,20 +31,20 @@ where
 
     fn new_transform(&self, service: S) -> Self::Future {
         ready(Ok(VerifyJWTMiddleware {
-            service,
+            service: Rc::new(service),
             app_data: self.app_data.clone(),
         }))
     }
 }
 
 pub struct VerifyJWTMiddleware<S> {
-    service: S,
+    service: Rc<S>,
     app_data: web::Data<AppState>,
 }
 
 impl<S, B> Service<ServiceRequest> for VerifyJWTMiddleware<S>
 where 
-    S: Service<ServiceRequest, Response = ServiceResponse<B>, Error = Error>,
+    S: Service<ServiceRequest, Response = ServiceResponse<B>, Error = Error> + 'static,
     S::Future: 'static,
     B: 'static ,
 {
@@ -73,9 +73,33 @@ where
                 &Validation::default()
             ) {
                 Ok(data) => {
-                    req.extensions_mut().insert(data.claims.user.clone());
-                    let fut = self.service.call(req);
-                    Box::pin(async move { fut.await })
+                    let pool = self.app_data.db.clone(); 
+                    let user = data.claims.user.clone();
+                    let svc = self.service.clone();
+
+                    Box::pin(async move { 
+                        req.extensions_mut().insert(user.clone());
+                        let sub = sqlx::query_as!(
+                            SubscriptionData,
+                            r#"
+                            SELECT 
+                                plan AS "plan: crate::models::SubscriptionPlan", 
+                                status AS "status: crate::models::SubscriptionStatus", 
+                                ends_at
+                            FROM subscriptions
+                            WHERE user_id = $1
+                            "#,
+                            user.id
+                        )
+                        .fetch_one(&pool)
+                        .await
+                        .map_err(actix_web::error::ErrorInternalServerError)?;
+
+                        req.extensions_mut().insert(sub);
+                        
+                        let fut = svc.call(req);
+                        fut.await 
+                    })
                 }
                 Err(_) => {
                     Box::pin(async {

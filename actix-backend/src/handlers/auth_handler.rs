@@ -3,14 +3,14 @@ use actix_web::{
     post, web, HttpRequest, HttpResponse, Responder,
 };
 use bcrypt::{hash, verify};
-use chrono::{Utc, Duration as ChronoDuration};
+use chrono::{ Duration as ChronoDuration, Utc};
 use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, Validation};
 use serde::Deserialize;
-use sqlx::Error;
+use sqlx::{Error};
 use uuid::Uuid;
 
 use crate::{
-    models::{Claims, UserData, UserSession},
+    models::{Claims, UserData},
     utils::test_password,
     AppState,
 };
@@ -23,7 +23,6 @@ pub struct UserRegisterRequest {
     pub full_name: Option<String>,
     pub password: String,
 }
-
 
 #[post("/register")]
 pub async fn register(
@@ -46,8 +45,13 @@ pub async fn register(
 
     let res = sqlx::query!(
         r#"
-        INSERT INTO users (email, username, full_name, password_hash)
-        VALUES ($1, $2, $3, $4)
+        WITH new_user AS (
+          INSERT INTO users (email, username, full_name, password_hash)
+          VALUES ($1, $2, $3, $4)
+          RETURNING id
+        )
+        INSERT INTO subscriptions (user_id)
+        SELECT id FROM new_user;
         "#,
         req.email,
         req.username,
@@ -337,8 +341,7 @@ pub async fn refresh(
     };
     let user_id = token_data.claims.user.id;
 
-    let session = match sqlx::query_as!(
-        UserSession,
+    let session = match sqlx::query!(
         r#"
         SELECT *
           FROM user_sessions
