@@ -31,6 +31,9 @@ pub async fn register(
 ) -> impl Responder {
     let req = register_json.into_inner();
 
+    if req.email.is_empty() || req.username.is_empty() || req.password.is_empty() || req.full_name.is_empty() {
+        return HttpResponse::BadRequest().json(serde_json::json!({ "error": "Missing required fields" }));
+    }
     if let Some(err) = test_password(&req.password) {
         return HttpResponse::BadRequest().json(serde_json::json!({ "error": err }));
     }
@@ -86,6 +89,10 @@ pub async fn login(
     login_json: web::Json<UserLoginRequest>,
 ) -> impl Responder {
     let body = login_json.into_inner();
+    if body.email.is_empty() || body.password.is_empty() {
+        return HttpResponse::BadRequest()
+            .json(serde_json::json!({ "error": "Missing required fields" }));
+    }
 
     let row = sqlx::query!(
         "SELECT id, password_hash FROM users WHERE email = $1",
