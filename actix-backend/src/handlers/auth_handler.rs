@@ -20,7 +20,7 @@ use crate::{
 pub struct UserRegisterRequest {
     pub email: String,
     pub username: String,
-    pub full_name: Option<String>,
+    pub full_name: String,
     pub password: String,
 }
 
@@ -31,9 +31,6 @@ pub async fn register(
 ) -> impl Responder {
     let req = register_json.into_inner();
 
-    if req.email.is_empty() || req.username.is_empty() || req.password.is_empty() {
-        return HttpResponse::BadRequest().json(serde_json::json!({ "error": "Missing required fields" }));
-    }
     if let Some(err) = test_password(&req.password) {
         return HttpResponse::BadRequest().json(serde_json::json!({ "error": err }));
     }
@@ -89,10 +86,6 @@ pub async fn login(
     login_json: web::Json<UserLoginRequest>,
 ) -> impl Responder {
     let body = login_json.into_inner();
-    if body.email.is_empty() || body.password.is_empty() {
-        return HttpResponse::BadRequest()
-            .json(serde_json::json!({ "error": "Missing required fields" }));
-    }
 
     let row = sqlx::query!(
         "SELECT id, password_hash FROM users WHERE email = $1",
@@ -368,6 +361,30 @@ pub async fn refresh(
         }
     };
 
+    let row = match sqlx::query!(
+        r#"
+        SELECT
+          u.email,
+          u.username,
+          u.profile_picture_url,
+          COALESCE(s.plan::TEXT, 'free') AS subscription_plan
+        FROM users u
+        LEFT JOIN subscriptions s
+          ON s.user_id = u.id
+        WHERE u.id = $1
+        "#,
+        user_id
+    )
+    .fetch_one(&app_state.db)
+    .await
+    {
+        Ok(data) => data,
+        Err(_) => {
+            return HttpResponse::InternalServerError()
+                .json(serde_json::json!({ "error": "DB error fetching user data" }));
+        }
+    };
+
     let exp = Utc::now() + ChronoDuration::minutes(15);
     let claims = Claims { exp: exp.timestamp() as usize, user: UserData { id: session.user_id } };
 
@@ -383,42 +400,14 @@ pub async fn refresh(
         }
     };
 
-    HttpResponse::Ok()
-        .json(serde_json::json!({ "accessToken": access_token, "error": null }))
-}
-
-#[post("/user")]
-async fn retrive_user(app_state: web::Data<AppState>, user_data: web::ReqData<UserData>) -> actix_web::Result<impl Responder> {
-    let user_id = user_data.id;
-
-    let row = sqlx::query!(
-        r#"
-        SELECT
-          u.email,
-          u.full_name,
-          u.profile_picture_url,
-          COALESCE(s.plan::TEXT, 'free') AS subscription_plan
-        FROM users u
-        LEFT JOIN subscriptions s
-          ON s.user_id = u.id
-        WHERE u.id = $1
-        "#,
-        user_id
-    )
-    .fetch_optional(&app_state.db)
-    .await
-    .map_err(actix_web::error::ErrorInternalServerError)?;
-
-    if let Some(data) = row {
-        Ok(HttpResponse::Ok().json(serde_json::json!({
-            "email": data.email,
-            "fullName": data.full_name,
-            "profilePicture": data.profile_picture_url,
-            "subscriptionPlan": data.subscription_plan,
-        })))
-    } else {
-        Ok(HttpResponse::NotFound().json(serde_json::json!({
-            "error": format!("No user found with id {}", user_id)
-        })))
-    }
+   HttpResponse::Ok().json(serde_json::json!({
+        "accessToken": access_token,
+        "user": {
+            "email": row.email,
+            "username": row.username,
+            "profilePicture": row.profile_picture_url,
+            "subscriptionPlan": row.subscription_plan,
+        },
+        "error": null
+    }))
 }
