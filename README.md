@@ -10,11 +10,11 @@ This repository hosts the **full stack** of the Principium platform:
 
 ## 🧩 Apps We're Building
 
-| Name              | Type            | Inspired By      | Status         |
-| ----------------- | --------------- | ---------------- | -------------- |
-| VSC Code Snippets | Snippet Manager | -                | ✅ Working     |
-| Write Right       | Markdown Editor | Notion, Obsidian | 🛠️ In Progress |
-| Task Track        | Kanban Board    | Trello, Notion   | 🛠️ In Progress |
+| Name                                                      | Type            | Inspired By      | Status         |
+| --------------------------------------------------------- | --------------- | ---------------- | -------------- |
+| VSC Code Snippets                                         | Snippet Manager | -                | ✅ Working     |
+| [Write Right](https://github.com/rarescovei5/WriteRight)  | Markdown Editor | Notion, Obsidian | 🛠️ In Progress |
+| [Task Track](https://github.com/rarescovei5/TaskTrack)    | Kanban Board    | Trello, Notion   | 🛠️ In Progress |
 
 ## 🚀 Features
 
